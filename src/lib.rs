@@ -1261,11 +1261,27 @@ impl Build {
             (output, gnu)
         };
         let dst = self.get_out_dir()?;
+        let target = self.get_target()?;
 
-        let objects = objects_from_files(&self.files, &dst)?;
+        if let Some(libraries_path) = env::var_os("CC_LIBRARIES_PATH").map(PathBuf::from) {
+            let path = libraries_path.join(&*target);
+            if !path.exists() {
+                println!("cargo:warning=Could not find {}", path.display());
+            }
+            fs::copy(path.join(&gnu_lib_name), dst.join(&gnu_lib_name))?;
+        } else {
+            let objects = objects_from_files(&self.files, &dst)?;
 
-        self.compile_objects(&objects)?;
-        self.assemble(lib_name, &dst.join(gnu_lib_name), &objects)?;
+            self.compile_objects(&objects)?;
+            self.assemble(lib_name, &dst.join(&gnu_lib_name), &objects)?;
+        }
+
+        if let Some(dump_libraries_path) = env::var_os("CC_DUMP_LIBRARIES_PATH").map(PathBuf::from)
+        {
+            let path = dump_libraries_path.join(&*target);
+            fs::create_dir_all(&path)?;
+            fs::copy(dst.join(&gnu_lib_name), path.join(&gnu_lib_name))?;
+        }
 
         if self.get_target()?.contains("msvc") {
             let compiler = self.get_base_compiler()?;
